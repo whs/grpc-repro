@@ -23,6 +23,7 @@ class ServerThread(multiprocessing.Process):
 	def __init__(self):
 		super().__init__()
 		self.logger = logging.getLogger(self.__class__.__name__)
+		self.pipe1, self.pipe2 = multiprocessing.Pipe()
 
 	def run(self):
 		self.logger.info('Building server')
@@ -32,8 +33,20 @@ class ServerThread(multiprocessing.Process):
 		
 		self.logger.info('Server start')
 		self.server.start()
-		time.sleep(1000)
-		self.logger.info('Server end')
+		self.pipe2.send(True)
+
+		self.pipe2.recv()
+		self.logger.info('Stopping server')
+		self.server.stop(True)
+		self.pipe2.send(True)
+	
+	def wait_for_start(self):
+		self.pipe1.recv()
+	
+	def stop(self):
+		self.pipe1.send(True)
+		self.pipe1.recv()
+		self.logger.info('Server stopped')
 
 
 if __name__ == "__main__":
@@ -42,7 +55,7 @@ if __name__ == "__main__":
 	# Start server
 	server = ServerThread()
 	server.start()
-	time.sleep(0.1)
+	server.wait_for_start()
 
 	# Fire up first call
 	logging.info('Sending first call')
@@ -52,10 +65,10 @@ if __name__ == "__main__":
 
 	# Restart server
 	logging.info('Restarting server')
-	server.terminate()
+	server.stop()
 	server = ServerThread()
 	server.start()
-	time.sleep(0.1)
+	server.wait_for_start()
 
 	# Fire second call
 	logging.info('Sending second call')
@@ -68,4 +81,4 @@ if __name__ == "__main__":
 	logging.info('Sending third call')
 	logging.info('Ping response: %s', client.Ping(PingRequest()))
 
-	server.terminate()
+	server.stop()
